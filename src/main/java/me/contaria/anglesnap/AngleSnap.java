@@ -3,6 +3,7 @@ package me.contaria.anglesnap;
 import com.mojang.logging.LogUtils;
 import me.contaria.anglesnap.config.AngleSnapConfig;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
@@ -10,8 +11,11 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.option.StickyKeyBinding;
-import net.minecraft.client.render.*;
+import net.minecraft.client.render.Camera;
+import net.minecraft.client.render.OverlayTexture;
+import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.RenderTickCounter;
+import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.Colors;
 import net.minecraft.util.Identifier;
@@ -39,6 +43,8 @@ public class AngleSnap implements ClientModInitializer {
     public static KeyBinding openOverlay;
     public static KeyBinding cameraPositions;
 
+    private static boolean overlayEnabled;
+
     @Nullable
     public static CameraPosEntry currentCameraPos;
 
@@ -49,18 +55,24 @@ public class AngleSnap implements ClientModInitializer {
                 GLFW.GLFW_KEY_F6,
                 ANGLESNAP_CATEGORY
         ));
-        openOverlay = KeyBindingHelper.registerKeyBinding(new StickyKeyBinding(
+
+        openOverlay = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "anglesnap.key.openoverlay",
                 GLFW.GLFW_KEY_F7,
-                ANGLESNAP_CATEGORY,
-                () -> true,
-                false
+                ANGLESNAP_CATEGORY
         ));
+
         cameraPositions = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "anglesnap.key.camerapositions",
                 GLFW.GLFW_KEY_F8,
                 ANGLESNAP_CATEGORY
         ));
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            while (openOverlay.wasPressed()) {
+                overlayEnabled = !overlayEnabled;
+            }
+        });
 
         HudElementRegistry.addFirst(Identifier.of("anglesnap", "overlay"), AngleSnap::renderHud);
 
@@ -80,7 +92,7 @@ public class AngleSnap implements ClientModInitializer {
     }
 
     public static boolean shouldRenderOverlay() {
-        return openOverlay.isPressed();
+        return overlayEnabled;
     }
 
     private static void renderHud(DrawContext context, RenderTickCounter tickCounter) {
@@ -158,8 +170,8 @@ public class AngleSnap implements ClientModInitializer {
 
         org.joml.Vector4f v0 = new org.joml.Vector4f(-1.0f, -1.0f, 0.0f, 1.0f).mul(matrix4f);
         org.joml.Vector4f v1 = new org.joml.Vector4f(-1.0f,  1.0f, 0.0f, 1.0f).mul(matrix4f);
-        org.joml.Vector4f v2 = new org.joml.Vector4f( 1.0f,  1.0f, 0.0f, 1.0f).mul(matrix4f);
-        org.joml.Vector4f v3 = new org.joml.Vector4f( 1.0f, -1.0f, 0.0f, 1.0f).mul(matrix4f);
+        org.joml.Vector4f v2 = new org.joml.Vector4f(1.0f,  1.0f, 0.0f, 1.0f).mul(matrix4f);
+        org.joml.Vector4f v3 = new org.joml.Vector4f(1.0f, -1.0f, 0.0f, 1.0f).mul(matrix4f);
 
         consumer.vertex(v0.x, v0.y, v0.z, packedColor, 0.0f, 0.0f, overlay, light, nx, ny, nz);
         consumer.vertex(v1.x, v1.y, v1.z, packedColor, 0.0f, 1.0f, overlay, light, nx, ny, nz);
