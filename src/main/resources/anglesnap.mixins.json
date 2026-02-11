@@ -6,7 +6,8 @@
   "client": [
     "CameraMixin",
     "MinecraftClientMixin",
-    "MouseMixin"
+    "MouseMixin",
+    "WorldRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

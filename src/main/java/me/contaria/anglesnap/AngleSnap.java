@@ -11,14 +11,12 @@ import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.option.StickyKeyBinding;
-import net.minecraft.client.render.Camera;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.client.render.VertexConsumer;
+import net.minecraft.client.render.*;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.Colors;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.WorldSavePath;
+import net.minecraft.util.math.ColorHelper;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import org.jetbrains.annotations.Nullable;
@@ -68,7 +66,10 @@ public class AngleSnap implements ClientModInitializer {
 
         ClientPlayConnectionEvents.JOIN.register((networkHandler, packetSender, client) -> {
             if (client.isIntegratedServerRunning()) {
-                AngleSnap.CONFIG.loadAnglesAndCameraPositions(Objects.requireNonNull(client.getServer()).getSavePath(WorldSavePath.ROOT).getParent().getFileName().toString(), AngleSnapConfig.AngleFolder.SINGLEPLAYER);
+                AngleSnap.CONFIG.loadAnglesAndCameraPositions(
+                        Objects.requireNonNull(client.getServer()).getSavePath(WorldSavePath.ROOT).getParent().getFileName().toString(),
+                        AngleSnapConfig.AngleFolder.SINGLEPLAYER
+                );
             } else if (Objects.requireNonNull(networkHandler.getServerInfo()).isRealm()) {
                 AngleSnap.CONFIG.loadAnglesAndCameraPositions(networkHandler.getServerInfo().name, AngleSnapConfig.AngleFolder.REALMS);
             } else {
@@ -87,19 +88,24 @@ public class AngleSnap implements ClientModInitializer {
             if (AngleSnap.CONFIG.angleHud.getValue()) {
                 renderAngleHud(context);
             }
-            // Note: World rendering of angle markers has been temporarily disabled
-            // due to WorldRenderEvents removal in Fabric API 0.136.0+1.21.10
-            // This will be re-enabled when Fabric provides a replacement rendering API
         }
     }
 
     public static void renderOverlay(Camera camera, Matrix4f positionMatrix) {
-        // Temporarily disabled - see renderHud() for details
-        /*if (shouldRenderOverlay()) {
-            for (AngleEntry angle : AngleSnap.CONFIG.getAngles()) {
-                renderMarker(camera, positionMatrix, angle, AngleSnap.CONFIG.markerScale.getValue(), AngleSnap.CONFIG.textScale.getValue());
-            }
-        }*/
+        if (!shouldRenderOverlay()) {
+            return;
+        }
+
+        float markerScale = AngleSnap.CONFIG.markerScale.getValue();
+        float textScale = AngleSnap.CONFIG.textScale.getValue();
+        if (markerScale <= 0.0f && textScale <= 0.0f) {
+            return;
+        }
+
+        for (AngleEntry angle : AngleSnap.CONFIG.getAngles()) {
+            renderMarker(camera, positionMatrix, angle, markerScale, textScale);
+        }
+        MinecraftClient.getInstance().getBufferBuilders().getEntityVertexConsumers().draw();
     }
 
     private static void renderMarker(Camera camera, Matrix4f positionMatrix, AngleEntry angle, float markerScale, float textScale) {
@@ -110,6 +116,7 @@ public class AngleSnap implements ClientModInitializer {
                 MathHelper.wrapDegrees(angle.pitch),
                 MathHelper.wrapDegrees(angle.yaw + 180.0f)
         ).multiply(-1.0, 1.0, -1.0).toVector3f();
+
         Quaternionf rotation = camera.getRotation();
 
         drawIcon(camera, positionMatrix, pos, rotation, angle, markerScale);
@@ -132,14 +139,33 @@ public class AngleSnap implements ClientModInitializer {
 
         Matrix4f matrix4f = matrices.peek().getPositionMatrix();
         MinecraftClient client = MinecraftClient.getInstance();
-        RenderLayer layer = RenderLayer.getEntityTranslucent(angle.getIcon());
-        VertexConsumer consumer = client.getBufferBuilders().getEffectVertexConsumers().getBuffer(layer);
-        consumer.vertex(matrix4f, -1.0f, -1.0f, 0.0f).color(angle.color).texture(0.0f, 0.0f);
-        consumer.vertex(matrix4f, -1.0f, 1.0f, 0.0f).color(angle.color).texture(0.0f, 1.0f);
-        consumer.vertex(matrix4f, 1.0f, 1.0f, 0.0f).color(angle.color).texture(1.0f, 1.0f);
-        consumer.vertex(matrix4f, 1.0f, -1.0f, 0.0f).color(angle.color).texture(1.0f, 0.0f);
 
-        matrices.scale(1.0f / scale, 1.0f / -scale, 1.0f / scale);
+        RenderLayer layer = RenderLayer.getEntityTranslucent(angle.getIcon());
+        VertexConsumer consumer = client.getBufferBuilders().getEntityVertexConsumers().getBuffer(layer);
+
+        int a = ColorHelper.getAlpha(angle.color);
+        int r = ColorHelper.getRed(angle.color);
+        int g = ColorHelper.getGreen(angle.color);
+        int b = ColorHelper.getBlue(angle.color);
+        int packedColor = ColorHelper.getArgb(a, r, g, b);
+
+        int light = 0x00F000F0;
+        int overlay = OverlayTexture.DEFAULT_UV;
+
+        float nx = 0.0f;
+        float ny = 0.0f;
+        float nz = 1.0f;
+
+        org.joml.Vector4f v0 = new org.joml.Vector4f(-1.0f, -1.0f, 0.0f, 1.0f).mul(matrix4f);
+        org.joml.Vector4f v1 = new org.joml.Vector4f(-1.0f,  1.0f, 0.0f, 1.0f).mul(matrix4f);
+        org.joml.Vector4f v2 = new org.joml.Vector4f( 1.0f,  1.0f, 0.0f, 1.0f).mul(matrix4f);
+        org.joml.Vector4f v3 = new org.joml.Vector4f( 1.0f, -1.0f, 0.0f, 1.0f).mul(matrix4f);
+
+        consumer.vertex(v0.x, v0.y, v0.z, packedColor, 0.0f, 0.0f, overlay, light, nx, ny, nz);
+        consumer.vertex(v1.x, v1.y, v1.z, packedColor, 0.0f, 1.0f, overlay, light, nx, ny, nz);
+        consumer.vertex(v2.x, v2.y, v2.z, packedColor, 1.0f, 1.0f, overlay, light, nx, ny, nz);
+        consumer.vertex(v3.x, v3.y, v3.z, packedColor, 1.0f, 0.0f, overlay, light, nx, ny, nz);
+
         matrices.pop();
     }
 
@@ -158,13 +184,16 @@ public class AngleSnap implements ClientModInitializer {
         Matrix4f matrix4f = matrices.peek().getPositionMatrix();
         MinecraftClient client = MinecraftClient.getInstance();
         TextRenderer textRenderer = client.textRenderer;
+
         float x = -textRenderer.getWidth(angle.name) / 2.0f;
         int backgroundColor = (int) (client.options.getTextBackgroundOpacity(0.25f) * 255.0f) << 24;
+
         textRenderer.draw(
-                angle.name, x, -15.0f, Colors.WHITE, false, matrix4f, client.getBufferBuilders().getEffectVertexConsumers(), TextRenderer.TextLayerType.SEE_THROUGH, backgroundColor, 15
+                angle.name, x, -15.0f, Colors.WHITE, false, matrix4f,
+                client.getBufferBuilders().getEntityVertexConsumers(),
+                TextRenderer.TextLayerType.SEE_THROUGH, backgroundColor, 15
         );
 
-        matrices.scale(1.0f / scale, 1.0f / -scale, 1.0f / scale);
         matrices.pop();
     }
 

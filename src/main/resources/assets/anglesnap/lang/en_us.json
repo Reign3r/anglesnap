@@ -6,7 +6,7 @@
   "anglesnap.gui.screen.yaw": "Yaw",
   "anglesnap.gui.screen.pitch": "Pitch",
   "anglesnap.gui.screen.icon": "Icon",
-  "anglesnap.gui.screen.color": "RBGA",
+  "anglesnap.gui.screen.color": "RGBA",
   "anglesnap.gui.screen.x": "X",
   "anglesnap.gui.screen.y": "Y",
   "anglesnap.gui.screen.z": "Z",
