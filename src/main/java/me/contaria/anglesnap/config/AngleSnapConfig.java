@@ -8,14 +8,15 @@ import me.contaria.anglesnap.AngleEntry;
 import me.contaria.anglesnap.AngleSnap;
 import me.contaria.anglesnap.CameraPosEntry;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.*;
@@ -96,6 +97,15 @@ public class AngleSnapConfig {
         }
     }
 
+    private static void deleteDirectoryIfEmpty(Path directory) {
+        try {
+            Files.deleteIfExists(directory);
+        } catch (DirectoryNotEmptyException ignored) {
+        } catch (Exception e) {
+            AngleSnap.LOGGER.error("[AngleSnap] Failed to delete empty config directory at '{}'!", directory, e);
+        }
+    }
+
     public void loadAngles(Path directory) {
         this.anglesPath = directory.resolve("angles.json");
         this.loadAngles();
@@ -135,7 +145,7 @@ public class AngleSnapConfig {
         try {
             if (this.angles.isEmpty()) {
                 Files.deleteIfExists(this.anglesPath);
-                Files.deleteIfExists(this.anglesPath.getParent());
+                deleteDirectoryIfEmpty(this.anglesPath.getParent());
             } else {
                 Files.createDirectories(this.anglesPath.getParent());
                 Files.writeString(this.anglesPath, GSON.toJson(AngleEntry.listToJson(this.angles)));
@@ -152,7 +162,7 @@ public class AngleSnapConfig {
     }
 
     public void unloadCameraPositions() {
-        AngleSnap.currentCameraPos = null;
+        AngleSnap.setCurrentCameraPos(null);
         this.saveCameraPositions();
         this.cameraPositionsPath = null;
         this.cameraPositions = null;
@@ -185,7 +195,7 @@ public class AngleSnapConfig {
         try {
             if (this.cameraPositions.isEmpty()) {
                 Files.deleteIfExists(this.cameraPositionsPath);
-                Files.deleteIfExists(this.cameraPositionsPath.getParent());
+                deleteDirectoryIfEmpty(this.cameraPositionsPath.getParent());
             } else {
                 Files.createDirectories(this.cameraPositionsPath.getParent());
                 Files.writeString(this.cameraPositionsPath, GSON.toJson(CameraPosEntry.listToJson(this.cameraPositions)));
@@ -262,10 +272,10 @@ public class AngleSnapConfig {
             AngleSnap.LOGGER.warn("[AngleSnap] Tried to create angle but no angles are currently loaded!");
             return null;
         }
-        ClientPlayerEntity player = MinecraftClient.getInstance().player;
+        LocalPlayer player = Minecraft.getInstance().player;
         AngleEntry angle = new AngleEntry(
-                player != null ? (int) (MathHelper.wrapDegrees(player.getYaw()) * 10.0f) / 10.0f : 0.0f,
-                player != null ? (int) (MathHelper.wrapDegrees(player.getPitch()) * 10.0f) / 10.0f : 0.0f
+                player != null ? (int) (Mth.wrapDegrees(player.getYRot()) * 10.0f) / 10.0f : 0.0f,
+                player != null ? (int) (Mth.wrapDegrees(player.getXRot()) * 10.0f) / 10.0f : 0.0f
         );
         this.angles.add(angle);
         return angle;
@@ -292,11 +302,11 @@ public class AngleSnapConfig {
             AngleSnap.LOGGER.warn("[AngleSnap] Tried to create camera position but no positions are currently loaded!");
             return null;
         }
-        Vec3d cameraPos = MinecraftClient.getInstance().gameRenderer.getCamera().getPos();
+        Vec3 cameraPos = Minecraft.getInstance().gameRenderer.getMainCamera().position();
         CameraPosEntry pos = new CameraPosEntry(
-                (int) (cameraPos.getX() * 100.0) / 100.0,
-                (int) (cameraPos.getY() * 100.0) / 100.0,
-                (int) (cameraPos.getZ() * 100.0) / 100.0
+                (int) (cameraPos.x() * 100.0) / 100.0,
+                (int) (cameraPos.y() * 100.0) / 100.0,
+                (int) (cameraPos.z() * 100.0) / 100.0
         );
         this.cameraPositions.add(pos);
         return pos;

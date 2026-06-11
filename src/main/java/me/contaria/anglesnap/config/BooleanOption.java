@@ -2,10 +2,10 @@ package me.contaria.anglesnap.config;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.ClickableWidget;
-import net.minecraft.screen.ScreenTexts;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
 
 public class BooleanOption extends Option<Boolean> {
     private boolean value;
@@ -31,21 +31,21 @@ public class BooleanOption extends Option<Boolean> {
     }
 
     @Override
-    public ClickableWidget createWidget(int x, int y, int width, int height) {
-        return ButtonWidget.builder(this.getMessage(), button -> {
+    public AbstractWidget createWidget(int x, int y, int width, int height) {
+        return Button.builder(this.getMessage(), button -> {
             this.setValue(!this.getValue());
             button.setMessage(BooleanOption.this.getMessage());
-        }).dimensions(x, y, width, height).build();
+        }).bounds(x, y, width, height).build();
     }
 
     @Override
-    public Text getDefaultMessage() {
-        return ScreenTexts.onOrOff(this.getValue());
+    public Component getDefaultMessage() {
+        return CommonComponents.optionStatus(this.getValue());
     }
 
     @Override
-    protected void fromJson(JsonElement jsonElement) {
-        this.setValue(jsonElement.getAsBoolean());
+    protected void fromJson(JsonElement jsonGuiEventListener) {
+        this.setValue(jsonGuiEventListener.getAsBoolean());
     }
 
     @Override

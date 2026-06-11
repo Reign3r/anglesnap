@@ -2,9 +2,9 @@ package me.contaria.anglesnap.config;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
-import net.minecraft.client.gui.widget.ClickableWidget;
-import net.minecraft.client.gui.widget.SliderWidget;
-import net.minecraft.text.Text;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.network.chat.Component;
 
 public class FloatOption extends Option<Float> {
     private final float min;
@@ -35,8 +35,8 @@ public class FloatOption extends Option<Float> {
     }
 
     @Override
-    public ClickableWidget createWidget(int x, int y, int width, int height) {
-        return new SliderWidget(x, y, width, height, FloatOption.this.getMessage(), ((double) this.getValue() - this.min) / (FloatOption.this.max - FloatOption.this.min)) {
+    public AbstractWidget createWidget(int x, int y, int width, int height) {
+        return new AbstractSliderButton(x, y, width, height, FloatOption.this.getMessage(), ((double) this.getValue() - this.min) / (FloatOption.this.max - FloatOption.this.min)) {
             @Override
             protected void updateMessage() {
                 this.setMessage(FloatOption.this.getMessage());
@@ -50,13 +50,13 @@ public class FloatOption extends Option<Float> {
     }
 
     @Override
-    public Text getDefaultMessage() {
-        return Text.literal(String.valueOf(Math.round(FloatOption.this.getValue() * 100.0f) / 100.0f));
+    public Component getDefaultMessage() {
+        return Component.literal(String.valueOf(Math.round(FloatOption.this.getValue() * 100.0f) / 100.0f));
     }
 
     @Override
-    protected void fromJson(JsonElement jsonElement) {
-        this.setValue(jsonElement.getAsFloat());
+    protected void fromJson(JsonElement jsonGuiEventListener) {
+        this.setValue(jsonGuiEventListener.getAsFloat());
     }
 
     @Override

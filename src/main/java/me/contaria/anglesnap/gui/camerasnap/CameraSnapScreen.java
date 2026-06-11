@@ -4,42 +4,42 @@ import me.contaria.anglesnap.AngleSnap;
 import me.contaria.anglesnap.gui.config.AngleSnapConfigScreen;
 import me.contaria.anglesnap.gui.screen.IconButtonWidget;
 import me.contaria.anglesnap.gui.warning.AngleSnapWarningScreen;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextWidget;
-import net.minecraft.screen.ScreenTexts;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.StringWidget;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 public class CameraSnapScreen extends Screen {
-    private static final Text CONFIGURE_TEXT = Text.translatable("anglesnap.gui.screen.configure");
-    private static final Identifier CONFIGURE_TEXTURE = Identifier.of("anglesnap", "textures/gui/configure.png");
+    private static final Component CONFIGURE_TEXT = Component.translatable("anglesnap.gui.screen.configure");
+    private static final Identifier CONFIGURE_TEXTURE = Identifier.fromNamespaceAndPath("anglesnap", "textures/gui/configure.png");
 
     private final Screen parent;
 
     protected CameraSnapScreen(Screen parent) {
-        super(Text.translatable("anglesnap.gui.screen.title.camerasnap"));
+        super(Component.translatable("anglesnap.gui.screen.title.camerasnap"));
         this.parent = parent;
     }
 
     @Override
     protected void init() {
-        int titleWidth = this.textRenderer.getWidth(this.title);
-        this.addDrawableChild(new TextWidget((this.width - titleWidth) / 2, 10, titleWidth, 15, this.title, this.textRenderer));
-        this.addDrawableChild(new IconButtonWidget(this.width - 26, 10, CONFIGURE_TEXT, button -> MinecraftClient.getInstance().setScreen(new AngleSnapConfigScreen(this)), CONFIGURE_TEXTURE));
-        this.addDrawableChild(new CameraSnapListWidget(this.client, this.width, this.height - 70, 35));
-        this.addDrawableChild(ButtonWidget.builder(ScreenTexts.DONE, button -> this.close()).dimensions(this.width / 2 - 100, this.height - 27, 200, 20).build());
+        int titleWidth = this.font.width(this.title);
+        this.addRenderableWidget(new StringWidget((this.width - titleWidth) / 2, 10, titleWidth, 15, this.title, this.font));
+        this.addRenderableWidget(new IconButtonWidget(this.width - 26, 10, CONFIGURE_TEXT, button -> Minecraft.getInstance().setScreen(new AngleSnapConfigScreen(this)), CONFIGURE_TEXTURE));
+        this.addRenderableWidget(new CameraSnapListWidget(this.minecraft, this.width, this.height - 70, 35));
+        this.addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, button -> this.onClose()).bounds(this.width / 2 - 100, this.height - 27, 200, 20).build());
     }
 
     @Override
-    public void close() {
-        MinecraftClient.getInstance().setScreen(this.parent);
+    public void onClose() {
+        Minecraft.getInstance().setScreen(this.parent);
     }
 
     @Override
     public void removed() {
-        AngleSnap.CONFIG.saveAngles();
+        AngleSnap.CONFIG.saveCameraPositions();
     }
 
     public static Screen create(Screen parent) {
@@ -51,9 +51,9 @@ public class CameraSnapScreen extends Screen {
                                 AngleSnap.CONFIG.disableMultiplayerWarning.setValue(true);
                                 AngleSnap.CONFIG.save();
                             }
-                            MinecraftClient.getInstance().setScreen(new CameraSnapScreen(parent));
+                            Minecraft.getInstance().setScreen(new CameraSnapScreen(parent));
                         },
-                        () -> MinecraftClient.getInstance().setScreen(parent)
+                        () -> Minecraft.getInstance().setScreen(parent)
                 );
             }
             return new CameraSnapScreen(parent);

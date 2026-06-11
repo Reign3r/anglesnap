@@ -4,12 +4,12 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.util.Colors;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.JsonHelper;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.util.CommonColors;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.GsonHelper;
+import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +26,7 @@ public class AngleEntry {
     }
 
     public AngleEntry(String name, float yaw, float pitch) {
-        this(name, yaw, pitch, 0, Colors.RED);
+        this(name, yaw, pitch, 0, CommonColors.RED);
     }
 
     public AngleEntry(String name, float yaw, float pitch, int icon, int color) {
@@ -39,7 +39,7 @@ public class AngleEntry {
 
     public Identifier nextIcon() {
         Identifier next = this.getIcon(++this.icon);
-        if (MinecraftClient.getInstance().getResourceManager().getResource(next).isPresent()) {
+        if (Minecraft.getInstance().getResourceManager().getResource(next).isPresent()) {
             return next;
         }
         return this.getIcon(this.icon = 0);
@@ -50,19 +50,25 @@ public class AngleEntry {
     }
 
     private Identifier getIcon(int icon) {
-        return Identifier.of("anglesnap", "textures/gui/marker-" + icon + ".png");
+        return Identifier.fromNamespaceAndPath("anglesnap", "textures/gui/marker-" + icon + ".png");
     }
 
     public float getDistance(float yaw, float pitch) {
-        yaw = Math.abs(MathHelper.wrapDegrees(yaw) - MathHelper.wrapDegrees(this.yaw));
-        pitch = Math.abs(MathHelper.wrapDegrees(pitch) - MathHelper.wrapDegrees(this.pitch));
-        return (float) Math.sqrt(yaw * yaw + pitch * pitch);
+        return AngleSnapMath.angleDistance(yaw, pitch, this.yaw, this.pitch);
     }
 
     public void snap() {
-        ClientPlayerEntity player = MinecraftClient.getInstance().player;
+        LocalPlayer player = Minecraft.getInstance().player;
         if (player != null) {
-            player.setAngles(this.yaw, this.pitch);
+            float yaw = AngleSnapMath.wrapDegrees(this.yaw);
+            float pitch = AngleSnapMath.clampPitch(this.pitch);
+
+            player.setYRot(yaw);
+            player.setXRot(pitch);
+            player.yRotO = yaw;
+            player.xRotO = pitch;
+            player.setYHeadRot(yaw);
+            player.yHeadRotO = yaw;
         }
     }
 
@@ -78,11 +84,11 @@ public class AngleEntry {
 
     public static AngleEntry fromJson(JsonObject jsonObject) {
         return new AngleEntry(
-                JsonHelper.getString(jsonObject, "name"),
-                JsonHelper.getFloat(jsonObject, "yaw"),
-                JsonHelper.getFloat(jsonObject, "pitch"),
-                JsonHelper.getInt(jsonObject, "icon", 0),
-                JsonHelper.getInt(jsonObject, "color", Colors.RED)
+                GsonHelper.getAsString(jsonObject, "name"),
+                GsonHelper.getAsFloat(jsonObject, "yaw"),
+                GsonHelper.getAsFloat(jsonObject, "pitch"),
+                GsonHelper.getAsInt(jsonObject, "icon", 0),
+                GsonHelper.getAsInt(jsonObject, "color", CommonColors.RED)
         );
     }
 

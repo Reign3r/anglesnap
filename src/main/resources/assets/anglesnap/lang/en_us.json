@@ -39,6 +39,7 @@
   "anglesnap.gui.config.option.disableMultiplayerWarning": "Disable Multiplayer Warning",
 
   "anglesnap.key": "AngleSnap",
+  "key.category.anglesnap.key": "AngleSnap",
   "anglesnap.key.openmenu": "Open AngleSnap Menu",
   "anglesnap.key.openoverlay": "Toggle AngleSnap Overlay",
   "anglesnap.key.camerapositions": "Select/Toggle Camera Position",

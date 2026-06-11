@@ -1,9 +1,9 @@
 package me.contaria.anglesnap.config;
 
 import com.google.gson.JsonElement;
-import net.minecraft.client.gui.widget.ClickableWidget;
-import net.minecraft.text.Text;
-import net.minecraft.util.Language;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.network.chat.Component;
+import net.minecraft.locale.Language;
 
 public abstract class Option<T> {
     private final String id;
@@ -16,19 +16,19 @@ public abstract class Option<T> {
         return this.id;
     }
 
-    public final Text getName() {
-        return Text.translatable("anglesnap.gui.config.option." + this.getId());
+    public final Component getName() {
+        return Component.translatable("anglesnap.gui.config.option." + this.getId());
     }
 
-    public final Text getMessage() {
+    public final Component getMessage() {
         Language language = Language.getInstance();
         String valueSpecified = "anglesnap.gui.config.option." + this.getId() + ".value." + this.getValue();
-        if (language.hasTranslation(valueSpecified)) {
-            return Text.translatable(valueSpecified);
+        if (language.has(valueSpecified)) {
+            return Component.translatable(valueSpecified);
         }
         String value = "anglesnap.gui.config.option." + this.getId() + ".value";
-        if (language.hasTranslation(value)) {
-            return Text.translatable(value, this.getDefaultMessage());
+        if (language.has(value)) {
+            return Component.translatable(value, this.getDefaultMessage());
         }
         return this.getDefaultMessage();
     }
@@ -39,11 +39,11 @@ public abstract class Option<T> {
 
     public abstract boolean hasWidget();
 
-    public abstract ClickableWidget createWidget(int x, int y, int width, int height);
+    public abstract AbstractWidget createWidget(int x, int y, int width, int height);
 
-    public abstract Text getDefaultMessage();
+    public abstract Component getDefaultMessage();
 
-    protected abstract void fromJson(JsonElement jsonElement);
+    protected abstract void fromJson(JsonElement jsonGuiEventListener);
 
     protected abstract JsonElement toJson();
 }

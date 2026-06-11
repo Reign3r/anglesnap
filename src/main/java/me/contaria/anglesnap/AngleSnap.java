@@ -4,25 +4,31 @@ import com.mojang.logging.LogUtils;
 import me.contaria.anglesnap.config.AngleSnapConfig;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.render.Camera;
-import net.minecraft.client.render.OverlayTexture;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.Colors;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.WorldSavePath;
-import net.minecraft.util.math.ColorHelper;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Camera;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.DeltaTracker;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.PoseStack;
+import me.contaria.anglesnap.gui.camerasnap.CameraSnapScreen;
+import me.contaria.anglesnap.gui.screen.AngleSnapScreen;
+import net.minecraft.util.CommonColors;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.util.ARGB;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
@@ -36,66 +42,116 @@ public class AngleSnap implements ClientModInitializer {
     public static final Logger LOGGER = LogUtils.getLogger();
     public static final AngleSnapConfig CONFIG = new AngleSnapConfig();
 
-    private static final KeyBinding.Category ANGLESNAP_CATEGORY =
-            KeyBinding.Category.create(Identifier.of("anglesnap", "key"));
+    private static final KeyMapping.Category ANGLESNAP_CATEGORY =
+            KeyMapping.Category.register(Identifier.fromNamespaceAndPath("anglesnap", "key"));
 
-    public static KeyBinding openMenu;
-    public static KeyBinding openOverlay;
-    public static KeyBinding cameraPositions;
+    public static KeyMapping openMenu;
+    public static KeyMapping openOverlay;
+    public static KeyMapping cameraPositions;
 
-    private static boolean overlayEnabled;
-
-    @Nullable
-    public static CameraPosEntry currentCameraPos;
+    private static final AngleSnapState STATE = new AngleSnapState();
 
     @Override
     public void onInitializeClient() {
-        openMenu = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        openMenu = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "anglesnap.key.openmenu",
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_F6,
                 ANGLESNAP_CATEGORY
         ));
 
-        openOverlay = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        openOverlay = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "anglesnap.key.openoverlay",
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_F7,
                 ANGLESNAP_CATEGORY
         ));
 
-        cameraPositions = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        cameraPositions = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "anglesnap.key.camerapositions",
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_F8,
                 ANGLESNAP_CATEGORY
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (openOverlay.wasPressed()) {
-                overlayEnabled = !overlayEnabled;
+            while (openMenu.consumeClick()) {
+                if (AngleSnap.CONFIG.hasAngles() && client.screen == null) {
+                    client.setScreen(AngleSnapScreen.create(null));
+                }
+            }
+            while (openOverlay.consumeClick()) {
+                STATE.toggleOverlay();
+            }
+            while (cameraPositions.consumeClick()) {
+                if (AngleSnap.getCurrentCameraPos() == null) {
+                    if (AngleSnap.CONFIG.hasCameraPositions() && client.screen == null) {
+                        client.setScreen(CameraSnapScreen.create(null));
+                    }
+                } else {
+                    AngleSnap.setCurrentCameraPos(null);
+                }
             }
         });
 
-        HudElementRegistry.addFirst(Identifier.of("anglesnap", "overlay"), AngleSnap::renderHud);
+        HudElementRegistry.addFirst(Identifier.fromNamespaceAndPath("anglesnap", "overlay"), AngleSnap::renderHud);
 
         ClientPlayConnectionEvents.JOIN.register((networkHandler, packetSender, client) -> {
-            if (client.isIntegratedServerRunning()) {
+            AngleSnap.resetRuntimeState();
+            if (client.hasSingleplayerServer()) {
                 AngleSnap.CONFIG.loadAnglesAndCameraPositions(
-                        Objects.requireNonNull(client.getServer()).getSavePath(WorldSavePath.ROOT).getParent().getFileName().toString(),
+                        Objects.requireNonNull(client.getSingleplayerServer()).getWorldPath(LevelResource.ROOT).getParent().getFileName().toString(),
                         AngleSnapConfig.AngleFolder.SINGLEPLAYER
                 );
-            } else if (Objects.requireNonNull(networkHandler.getServerInfo()).isRealm()) {
-                AngleSnap.CONFIG.loadAnglesAndCameraPositions(networkHandler.getServerInfo().name, AngleSnapConfig.AngleFolder.REALMS);
+            } else if (Objects.requireNonNull(client.getCurrentServer()).isRealm()) {
+                AngleSnap.CONFIG.loadAnglesAndCameraPositions(client.getCurrentServer().name, AngleSnapConfig.AngleFolder.REALMS);
             } else {
-                AngleSnap.CONFIG.loadAnglesAndCameraPositions(networkHandler.getServerInfo().address, AngleSnapConfig.AngleFolder.MULTIPLAYER);
+                AngleSnap.CONFIG.loadAnglesAndCameraPositions(client.getCurrentServer().ip, AngleSnapConfig.AngleFolder.MULTIPLAYER);
             }
         });
-        ClientPlayConnectionEvents.DISCONNECT.register((networkHandler, client) -> AngleSnap.CONFIG.unloadAnglesAndCameraPositions());
+        ClientPlayConnectionEvents.DISCONNECT.register((networkHandler, client) -> {
+            AngleSnap.resetRuntimeState();
+            AngleSnap.CONFIG.unloadAnglesAndCameraPositions();
+        });
+
+        LevelRenderEvents.END_MAIN.register(context -> AngleSnap.renderOverlay(
+                Minecraft.getInstance().gameRenderer.getMainCamera(),
+                context.poseStack().last().pose()
+        ));
     }
 
     public static boolean shouldRenderOverlay() {
-        return overlayEnabled;
+        return STATE.shouldRenderOverlay();
     }
 
-    private static void renderHud(DrawContext context, RenderTickCounter tickCounter) {
+    public static boolean shouldSnapToAngle(LocalPlayer player) {
+        return player != null && shouldRenderOverlay() && AngleSnap.CONFIG.snapToAngle.getValue();
+    }
+
+    public static void resetRuntimeState() {
+        STATE.resetRuntimeState();
+    }
+
+    @Nullable
+    public static CameraPosEntry getCurrentCameraPos() {
+        return STATE.getCurrentCameraPos();
+    }
+
+    public static void setCurrentCameraPos(@Nullable CameraPosEntry currentCameraPos) {
+        STATE.setCurrentCameraPos(currentCameraPos);
+    }
+
+    public static void clearCurrentCameraPos(CameraPosEntry cameraPos) {
+        STATE.clearCurrentCameraPos(cameraPos);
+    }
+
+    @Nullable
+    public static CameraPosEntry getActiveCameraPosition() {
+        Minecraft client = Minecraft.getInstance();
+        return client.level != null && client.player != null ? getCurrentCameraPos() : null;
+    }
+
+    private static void renderHud(GuiGraphicsExtractor context, DeltaTracker tickCounter) {
         if (shouldRenderOverlay()) {
             if (AngleSnap.CONFIG.angleHud.getValue()) {
                 renderAngleHud(context);
@@ -117,19 +173,19 @@ public class AngleSnap implements ClientModInitializer {
         for (AngleEntry angle : AngleSnap.CONFIG.getAngles()) {
             renderMarker(camera, positionMatrix, angle, markerScale, textScale);
         }
-        MinecraftClient.getInstance().getBufferBuilders().getEntityVertexConsumers().draw();
+        Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
     }
 
     private static void renderMarker(Camera camera, Matrix4f positionMatrix, AngleEntry angle, float markerScale, float textScale) {
         markerScale = markerScale / 10.0f;
         textScale = textScale / 50.0f;
 
-        Vector3f pos = Vec3d.fromPolar(
-                MathHelper.wrapDegrees(angle.pitch),
-                MathHelper.wrapDegrees(angle.yaw + 180.0f)
+        Vector3f pos = Vec3.directionFromRotation(
+                Mth.wrapDegrees(angle.pitch),
+                Mth.wrapDegrees(angle.yaw + 180.0f)
         ).multiply(-1.0, 1.0, -1.0).toVector3f();
 
-        Quaternionf rotation = camera.getRotation();
+        Quaternionf rotation = camera.rotation();
 
         drawIcon(camera, positionMatrix, pos, rotation, angle, markerScale);
         if (!angle.name.isEmpty()) {
@@ -142,27 +198,27 @@ public class AngleSnap implements ClientModInitializer {
             return;
         }
 
-        MatrixStack matrices = new MatrixStack();
-        matrices.multiplyPositionMatrix(positionMatrix);
-        matrices.push();
+        PoseStack matrices = new PoseStack();
+        matrices.mulPose(positionMatrix);
+        matrices.pushPose();
         matrices.translate(pos.x(), pos.y(), pos.z());
-        matrices.multiply(rotation);
+        matrices.mulPose(rotation);
         matrices.scale(scale, -scale, scale);
 
-        Matrix4f matrix4f = matrices.peek().getPositionMatrix();
-        MinecraftClient client = MinecraftClient.getInstance();
+        Matrix4f matrix4f = matrices.last().pose();
+        Minecraft client = Minecraft.getInstance();
 
-        RenderLayer layer = RenderLayer.getEntityTranslucent(angle.getIcon());
-        VertexConsumer consumer = client.getBufferBuilders().getEntityVertexConsumers().getBuffer(layer);
+        RenderType layer = RenderTypes.entityTranslucent(angle.getIcon());
+        VertexConsumer consumer = client.renderBuffers().bufferSource().getBuffer(layer);
 
-        int a = ColorHelper.getAlpha(angle.color);
-        int r = ColorHelper.getRed(angle.color);
-        int g = ColorHelper.getGreen(angle.color);
-        int b = ColorHelper.getBlue(angle.color);
-        int packedColor = ColorHelper.getArgb(a, r, g, b);
+        int a = ARGB.alpha(angle.color);
+        int r = ARGB.red(angle.color);
+        int g = ARGB.green(angle.color);
+        int b = ARGB.blue(angle.color);
+        int packedColor = ARGB.color(a, r, g, b);
 
         int light = 0x00F000F0;
-        int overlay = OverlayTexture.DEFAULT_UV;
+        int overlay = OverlayTexture.NO_OVERLAY;
 
         float nx = 0.0f;
         float ny = 0.0f;
@@ -173,12 +229,12 @@ public class AngleSnap implements ClientModInitializer {
         org.joml.Vector4f v2 = new org.joml.Vector4f(1.0f,  1.0f, 0.0f, 1.0f).mul(matrix4f);
         org.joml.Vector4f v3 = new org.joml.Vector4f(1.0f, -1.0f, 0.0f, 1.0f).mul(matrix4f);
 
-        consumer.vertex(v0.x, v0.y, v0.z, packedColor, 0.0f, 0.0f, overlay, light, nx, ny, nz);
-        consumer.vertex(v1.x, v1.y, v1.z, packedColor, 0.0f, 1.0f, overlay, light, nx, ny, nz);
-        consumer.vertex(v2.x, v2.y, v2.z, packedColor, 1.0f, 1.0f, overlay, light, nx, ny, nz);
-        consumer.vertex(v3.x, v3.y, v3.z, packedColor, 1.0f, 0.0f, overlay, light, nx, ny, nz);
+        consumer.addVertex(v0.x, v0.y, v0.z, packedColor, 0.0f, 0.0f, overlay, light, nx, ny, nz);
+        consumer.addVertex(v1.x, v1.y, v1.z, packedColor, 0.0f, 1.0f, overlay, light, nx, ny, nz);
+        consumer.addVertex(v2.x, v2.y, v2.z, packedColor, 1.0f, 1.0f, overlay, light, nx, ny, nz);
+        consumer.addVertex(v3.x, v3.y, v3.z, packedColor, 1.0f, 0.0f, overlay, light, nx, ny, nz);
 
-        matrices.pop();
+        matrices.popPose();
     }
 
     private static void drawName(Camera camera, Matrix4f positionMatrix, Vector3f pos, Quaternionf rotation, AngleEntry angle, float scale) {
@@ -186,42 +242,42 @@ public class AngleSnap implements ClientModInitializer {
             return;
         }
 
-        MatrixStack matrices = new MatrixStack();
-        matrices.multiplyPositionMatrix(positionMatrix);
-        matrices.push();
+        PoseStack matrices = new PoseStack();
+        matrices.mulPose(positionMatrix);
+        matrices.pushPose();
         matrices.translate(pos.x(), pos.y(), pos.z());
-        matrices.multiply(rotation);
+        matrices.mulPose(rotation);
         matrices.scale(scale, -scale, scale);
 
-        Matrix4f matrix4f = matrices.peek().getPositionMatrix();
-        MinecraftClient client = MinecraftClient.getInstance();
-        TextRenderer textRenderer = client.textRenderer;
+        Matrix4f matrix4f = matrices.last().pose();
+        Minecraft client = Minecraft.getInstance();
+        Font textRenderer = client.font;
 
-        float x = -textRenderer.getWidth(angle.name) / 2.0f;
-        int backgroundColor = (int) (client.options.getTextBackgroundOpacity(0.25f) * 255.0f) << 24;
+        float x = -textRenderer.width(angle.name) / 2.0f;
+        int backgroundColor = (int) (client.options.getBackgroundOpacity(0.25f) * 255.0f) << 24;
 
-        textRenderer.draw(
-                angle.name, x, -15.0f, Colors.WHITE, false, matrix4f,
-                client.getBufferBuilders().getEntityVertexConsumers(),
-                TextRenderer.TextLayerType.SEE_THROUGH, backgroundColor, 15
+        textRenderer.drawInBatch(
+                angle.name, x, -15.0f, CommonColors.WHITE, false, matrix4f,
+                client.renderBuffers().bufferSource(),
+                Font.DisplayMode.SEE_THROUGH, backgroundColor, 15
         );
 
-        matrices.pop();
+        matrices.popPose();
     }
 
-    private static void renderAngleHud(DrawContext context) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.getDebugHud().shouldShowDebugHud() || client.player == null) {
+    private static void renderAngleHud(GuiGraphicsExtractor context) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.getDebugOverlay().showDebugScreen() || client.player == null) {
             return;
         }
 
-        TextRenderer textRenderer = client.textRenderer;
-        String text = String.format("%.3f / %.3f", MathHelper.wrapDegrees(client.player.getYaw()), MathHelper.wrapDegrees(client.player.getPitch()));
-        context.fill(5, 5, 5 + 2 + textRenderer.getWidth(text) + 2, 5 + 2 + textRenderer.fontHeight + 2, -1873784752);
-        context.drawText(textRenderer, text, 5 + 2 + 1, 5 + 2 + 1, -2039584, false);
+        Font textRenderer = client.font;
+        String text = String.format("%.3f / %.3f", Mth.wrapDegrees(client.player.getYRot()), Mth.wrapDegrees(client.player.getXRot()));
+        context.fill(5, 5, 5 + 2 + textRenderer.width(text) + 2, 5 + 2 + textRenderer.lineHeight + 2, -1873784752);
+        context.text(textRenderer, text, 5 + 2 + 1, 5 + 2 + 1, -2039584, false);
     }
 
     public static boolean isInMultiplayer() {
-        return MinecraftClient.getInstance().world != null && !MinecraftClient.getInstance().isInSingleplayer();
+        return Minecraft.getInstance().level != null && !Minecraft.getInstance().isSingleplayer();
     }
 }

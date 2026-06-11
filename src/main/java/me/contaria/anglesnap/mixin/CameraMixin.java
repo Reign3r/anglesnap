@@ -1,9 +1,10 @@
 package me.contaria.anglesnap.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import me.contaria.anglesnap.AngleSnap;
 import me.contaria.anglesnap.CameraPosEntry;
-import net.minecraft.client.render.Camera;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.Camera;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
@@ -11,35 +12,37 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
 @Mixin(Camera.class)
 public abstract class CameraMixin {
 
-    @ModifyVariable(
-            method = "update",
-            at = @At("HEAD"),
-            ordinal = 0,
-            argsOnly = true
+    @ModifyExpressionValue(
+            method = "alignWithEntity",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/CameraType;isFirstPerson()Z"
+            )
     )
-    private boolean modifyThirdPerson(boolean thirdPerson) {
-        return thirdPerson || AngleSnap.currentCameraPos != null;
+    private boolean useDetachedCameraForCameraPosition(boolean firstPerson) {
+        return firstPerson && AngleSnap.getActiveCameraPosition() == null;
+    }
+
+    @ModifyExpressionValue(
+            method = "alignWithEntity",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/CameraType;isMirrored()Z"
+            )
+    )
+    private boolean disableMirroredCameraForCameraPosition(boolean mirrored) {
+        return mirrored && AngleSnap.getActiveCameraPosition() == null;
     }
 
     @ModifyVariable(
-            method = "update",
-            at = @At("HEAD"),
-            ordinal = 1,
-            argsOnly = true
-    )
-    private boolean modifyInverseView(boolean inverseView) {
-        return inverseView && AngleSnap.currentCameraPos == null;
-    }
-
-    @ModifyVariable(
-            method = "setPos(Lnet/minecraft/util/math/Vec3d;)V",
+            method = "setPosition(Lnet/minecraft/world/phys/Vec3;)V",
             at = @At("HEAD"),
             argsOnly = true
     )
-    private Vec3d modifyCameraPosition(Vec3d pos) {
-        CameraPosEntry entry = AngleSnap.currentCameraPos;
+    private Vec3 modifyCameraPosition(Vec3 pos) {
+        CameraPosEntry entry = AngleSnap.getActiveCameraPosition();
         if (entry != null) {
-            return new Vec3d(entry.x, entry.y, entry.z);
+            return new Vec3(entry.x, entry.y, entry.z);
         }
         return pos;
     }

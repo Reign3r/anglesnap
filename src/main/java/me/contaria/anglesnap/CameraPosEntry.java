@@ -4,7 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
-import net.minecraft.util.JsonHelper;
+import net.minecraft.util.GsonHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,10 +37,10 @@ public class CameraPosEntry {
 
     public static CameraPosEntry fromJson(JsonObject jsonObject) {
         return new CameraPosEntry(
-                JsonHelper.getString(jsonObject, "name"),
-                JsonHelper.getDouble(jsonObject, "x"),
-                JsonHelper.getDouble(jsonObject, "y"),
-                JsonHelper.getDouble(jsonObject, "z")
+                GsonHelper.getAsString(jsonObject, "name"),
+                GsonHelper.getAsDouble(jsonObject, "x"),
+                GsonHelper.getAsDouble(jsonObject, "y"),
+                GsonHelper.getAsDouble(jsonObject, "z")
         );
     }
 
